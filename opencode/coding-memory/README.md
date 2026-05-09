@@ -7,7 +7,7 @@ semantic search, keyword search, and reranker fusion.
 
 ```jsonc
 // opencode.jsonc
-{ "plugin": [{ "name": "@malaclyde/coding-memory-oc", "options": { "dbPath": "project" } }] }
+{ "plugin": [["@malaclyde/coding-memory-oc", { "dbPath": "project" }]] }
 ```
 
 ## Configuration

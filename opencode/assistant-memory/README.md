@@ -7,7 +7,7 @@ working/archival memory tier support.
 
 ```jsonc
 // opencode.jsonc
-{ "plugin": [{ "name": "@malaclyde/assistant-memory-oc", "options": { "dbPath": "project" } }] }
+{ "plugin": [["@malaclyde/assistant-memory-oc", { "dbPath": "project" }]] }
 ```
 
 ## Configuration
