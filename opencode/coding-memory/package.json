@@ -1,6 +1,6 @@
 {
   "name": "@malaclyde/coding-memory-oc",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "Memory tools for coding agents — plugin for OpenCode",
   "type": "module",
   "main": "./plugin.ts",
@@ -14,7 +14,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@malaclyde/knowledge-base": "^0.0.2",
+    "@malaclyde/knowledge-base": "^0.1.1",
     "@opencode-ai/plugin": "^1.14.0"
   },
   "license": "MIT"
