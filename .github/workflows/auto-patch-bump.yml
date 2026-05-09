@@ -9,6 +9,7 @@ on:
 
 jobs:
   bump:
+    if: ${{ !contains(github.event.head_commit.message, '[noCI]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,21 +51,3 @@ jobs:
         run: |
           git update-ref "refs/version/${{ steps.version.outputs.new_version }}" HEAD
           git push --force origin "refs/version/${{ steps.version.outputs.new_version }}"
-
-      - name: Update package.json files
-        run: |
-          V="${{ steps.version.outputs.new_version }}"
-          for pkg in package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json; do
-            node -e "
-              const p = require('./$pkg');
-              p.version = '$V';
-              require('fs').writeFileSync('./$pkg', JSON.stringify(p, null, 2) + '\n');
-            "
-          done
-
-      - name: Commit and push
-        run: |
-          V="${{ steps.version.outputs.new_version }}"
-          git add package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json
-          git -c user.name="gh-actions" -c user.email="actions@github.com" commit -m "Bump version to $V"
-          git push --force
