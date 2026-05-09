@@ -16,7 +16,7 @@ import { Reranker } from "semantic-memory/kb/reranker";
 // Instantiate once — model loading is expensive
 const embedder = new Embedder("Xenova/all-MiniLM-L6-v2", 384);
 const reranker = new Reranker("Xenova/bge-reranker-base", "Xenova/bge-reranker-base");
-const memory = new BaseWrapper(embedder, reranker);
+const memory = new BaseWrapper(embedder, reranker, { dbPath: './memory.db' });
 
 export default tool({
   description: "Store a fact into long-term memory",

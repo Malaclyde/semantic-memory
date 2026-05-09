@@ -1,0 +1,3 @@
+# v0.0.1
+- implemented [phase-1](.planning/0.0.1/phase-1.md)
+- implemented [phase-0](.planning/0.0.1/phase-0.md)
