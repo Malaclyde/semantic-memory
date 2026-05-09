@@ -2,9 +2,9 @@ import { tool } from "@opencode-ai/plugin";
 import type { PluginInput, PluginOptions, Hooks } from "@opencode-ai/plugin";
 import { execSync } from "child_process";
 import { existsSync } from "fs";
+import { createRequire } from "module";
 import path from "path";
 import os from "os";
-import { fileURLToPath } from "url";
 
 function resolveDbPath(dbPathOption: string | undefined, projectDir: string): string {
   if (dbPathOption === "global") {
@@ -17,20 +17,18 @@ function resolveDbPath(dbPathOption: string | undefined, projectDir: string): st
 // better-sqlite3's install script (prebuild-install || node-gyp rebuild)
 // from running. We ensure the native binding is built here.
 function ensureNativeBinding(): void {
-  const dir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.join(dir, 'node_modules', 'better-sqlite3'),
-    path.join(dir, '..', 'node_modules', 'better-sqlite3'),
-  ];
-  for (const bsPath of candidates) {
-    if (!existsSync(path.join(bsPath, 'package.json'))) continue;
-    if (existsSync(path.join(bsPath, 'build', 'Release', 'better_sqlite3.node'))) return;
-    try {
-      execSync('npx --yes prebuild-install', { cwd: bsPath, stdio: 'pipe', timeout: 30000 });
-    } catch {
-      execSync('npx --yes node-gyp rebuild --release', { cwd: bsPath, stdio: 'pipe', timeout: 120000 });
-    }
+  const _require = createRequire(import.meta.url);
+  let bsPath: string;
+  try {
+    bsPath = path.dirname(_require.resolve('better-sqlite3/package.json'));
+  } catch {
     return;
+  }
+  if (existsSync(path.join(bsPath, 'build', 'Release', 'better_sqlite3.node'))) return;
+  try {
+    execSync('npx --yes prebuild-install', { cwd: bsPath, stdio: 'pipe', timeout: 30000 });
+  } catch {
+    execSync('npx --yes node-gyp rebuild --release', { cwd: bsPath, stdio: 'pipe', timeout: 120000 });
   }
 }
 
