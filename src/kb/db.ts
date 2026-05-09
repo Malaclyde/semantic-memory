@@ -45,7 +45,9 @@ export interface ChunkResult {
 export interface CombinedSearchResult extends ChunkResult {
     distance?: number,
     ftsRank?: number,
-    rerankerScore: number
+    rerankerScore: number,
+    created_at?: string,
+    access_count?: number
 }
 
 export interface ConceptSearchResult {
@@ -282,7 +284,7 @@ export default class DB {
         })
     }
 
-    public async combinedSearch(text: string, limit: number, filters?: { propertyName: string; value: string; required: boolean }[]): Promise<CombinedSearchResult[]> {
+    public async combinedSearch(text: string, limit: number, filters?: { propertyName: string; value: string; required: boolean }[], olderThan?: string, youngerThan?: string): Promise<CombinedSearchResult[]> {
         const vecResults: VecSearchLightResult[] = this.#vectorIndex.size > 0
             ? (await this.#vectorIndex.search(
             await this.embedder.embed(text),
@@ -337,6 +339,18 @@ export default class DB {
                 });
             });
 
+            if (candidates.length === 0) return [];
+        }
+
+        // Date filtering
+        if (olderThan || youngerThan) {
+            let dateSql = 'SELECT id FROM chunks WHERE 1=1';
+            const dateParams: any[] = [];
+            if (olderThan) { dateSql += ' AND created_at < ?'; dateParams.push(olderThan); }
+            if (youngerThan) { dateSql += ' AND created_at > ?'; dateParams.push(youngerThan); }
+            const validIds = (this.db.prepare(dateSql).all(...dateParams) as { id: number }[])
+                .map(r => r.id);
+            candidates = candidates.filter(id => validIds.includes(id));
             if (candidates.length === 0) return [];
         }
 

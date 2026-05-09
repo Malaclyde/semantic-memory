@@ -5,6 +5,9 @@ export interface SearchOptions {
   filters?: { propertyName: string; value: string; required: boolean }[];
   scope?: string;
   memoryType?: string;
+  strictScope?: boolean;
+  olderThan?: string;
+  youngerThan?: string;
 }
 
 export default class BaseWrapper extends DB {
@@ -19,23 +22,44 @@ export default class BaseWrapper extends DB {
       filters.push(...options.filters);
     }
     if (options?.scope) {
-      filters.push({ propertyName: 'scope', value: options.scope, required: true });
+      const required = options.strictScope !== false;
+      filters.push({ propertyName: 'scope', value: options.scope, required });
     }
     if (options?.memoryType) {
       filters.push({ propertyName: 'memory_type', value: options.memoryType, required: true });
     }
 
-    const results = await this.combinedSearch(query, limit, filters.length > 0 ? filters : undefined);
+    const results = await this.combinedSearch(
+      query, limit,
+      filters.length > 0 ? filters : undefined,
+      options?.olderThan,
+      options?.youngerThan,
+    );
     await this.#enrichSources(results);
+    await this.#enrichDates(results);
     return results;
   }
 
   async store(
     text: string,
     concepts?: Concept[],
-    existingConceptIds?: number[]
+    existingConceptIds?: number[],
+    sources?: string[],
+    scope?: string,
   ): Promise<{ chunk: dbo.Chunk; concepts: dbo.Concept[] }> {
-    return this.insertChunk(text, concepts || [], existingConceptIds);
+    const props: Record<string, string> = {};
+    if (sources && sources.length > 0) {
+      props.sources = JSON.stringify(sources);
+    }
+    if (scope) {
+      props.scope = scope;
+    }
+    return this.insertChunk(
+      text,
+      concepts || [],
+      existingConceptIds,
+      Object.keys(props).length > 0 ? props : undefined
+    );
   }
 
   async getChunks(ids: number[]): Promise<ChunkResult[]> {
@@ -49,6 +73,22 @@ export default class BaseWrapper extends DB {
       const props = await this.getProps(r.id);
       if (props.sources) {
         (r as any).sources = JSON.parse(props.sources);
+      }
+    }
+  }
+
+  async #enrichDates(results: { id: number }[]): Promise<void> {
+    const ids = results.map(r => r.id);
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT id, created_at, access_count FROM chunks WHERE id IN (${placeholders})`
+    ).all(...ids) as { id: number; created_at: string; access_count: number }[];
+    for (const row of rows) {
+      const r = results.find(x => x.id === row.id);
+      if (r) {
+        (r as any).created_at = row.created_at;
+        (r as any).access_count = row.access_count;
       }
     }
   }

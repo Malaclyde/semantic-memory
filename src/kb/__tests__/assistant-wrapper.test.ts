@@ -149,7 +149,7 @@ describe('AssistantWrapper: source enrichment', () => {
     const results = await aw.search('enrichment', 5);
     const withSources = results.filter((r: any) => r.sources);
     expect(withSources.length).toBeGreaterThan(0);
-    expect(withSources[0].sources).toEqual(['https://enrich.test']);
+    expect((withSources[0] as any).sources).toEqual(['https://enrich.test']);
   });
 
   it('getChunks returns sources on results', async () => {

@@ -32,8 +32,9 @@ semantic search, keyword search, and reranker fusion.
 
 ## Dependencies
 
-Automatically installed by OpenCode: `@malaclyde/knowledge-base`, `@opencode-ai/plugin`,
-`better-sqlite3`, `@huggingface/transformers`, `sqlite-vec`.
+Automatically installed by OpenCode: `@malaclyde/knowledge-base`, `@opencode-ai/plugin`.
+`@huggingface/transformers` (for embeddings and reranker) and `usearch` (for vector search)
+are transitive dependencies.
 
 ## Prerequisites
 

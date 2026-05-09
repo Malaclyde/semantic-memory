@@ -41,7 +41,7 @@ jobs:
       - name: Read latest version
         id: version
         run: |
-          REF=$(git for-each-ref --sort=-creatordate --count=1 --format='%(refname:strip=2)' refs/version)
+          REF=$(git for-each-ref --format='%(refname:strip=2)' refs/version | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
           if [ -z "$REF" ]; then
             echo "No version ref found"
             exit 1
