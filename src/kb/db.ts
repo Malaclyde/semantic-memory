@@ -3,9 +3,12 @@ import type { Database, Statement } from './sqlite-adapter';
 import * as sqlite from 'sqlite-vec';
 import * as path from 'path';
 import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import Embedder from './embedder';
 import * as dbo from './dbo';
 import Reranker from './reranker';
+
+const _dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const FTS_SEARCH_LIMIT = 50;
 
@@ -65,7 +68,7 @@ export default class DB {
         }
         
         try {
-            const sql = fs.readFileSync(path.join('src', 'kb', 'sql', 'initialize.sql'), 'utf8').toString().replaceAll('${numDimensions}', this.embedder.numDimensions.toString());
+            const sql = fs.readFileSync(path.join(_dirname, 'sql', 'initialize.sql'), 'utf8').toString().replaceAll('${numDimensions}', this.embedder.numDimensions.toString());
             db.exec(sql);
         } catch (error) {
             console.error(`failed to initialize the db: ${error}`)
