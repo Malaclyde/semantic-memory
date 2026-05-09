@@ -70,4 +70,4 @@ jobs:
           V="${{ steps.version.outputs.new_version }}"
           git add package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json
           git -c user.name="crawler-bot" -c user.email="bot@malaclyde.dev" commit -m "Bump version to $V"
-          git push
+          git push --force
