@@ -1,6 +1,6 @@
 import { createDatabase } from './sqlite-adapter';
 import type { Database, Statement } from './sqlite-adapter';
-import * as sqlite from 'sqlite-vec';
+import { VectorIndex } from './vector-index';
 import * as path from 'path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,18 +57,13 @@ export interface ConceptSearchResult {
 export default class DB {
     #db: Database | undefined
     #dbPath: string
+    #vectorIndex: VectorIndex
     
     #init(): Database {
         var db = createDatabase(this.#dbPath);
 
         try {
-            sqlite.load(db);
-        } catch (error) {
-            console.error(`failed to load the sqlite-vec driver: ${error}`)
-        }
-        
-        try {
-            const sql = fs.readFileSync(path.join(_dirname, 'sql', 'initialize.sql'), 'utf8').toString().replaceAll('${numDimensions}', this.embedder.numDimensions.toString());
+            const sql = fs.readFileSync(path.join(_dirname, 'sql', 'initialize.sql'), 'utf8').toString();
             db.exec(sql);
         } catch (error) {
             console.error(`failed to initialize the db: ${error}`)
@@ -80,8 +75,6 @@ export default class DB {
 
     // #region 'utils'
 
-    // #generateId(): string { return sequuid(); }
-    #snaitizeEmbeddings(embedding: Float32Array) { return JSON.stringify(Array.from(embedding)); }
     #conceptText(concept: Concept): string {
         return concept.name + (concept.description ? ' ' + concept.description : '');
     }
@@ -96,20 +89,16 @@ export default class DB {
 
     // #region 'insert'
 
-    #insertChunk(): Statement { return this.db.prepare('INSERT INTO chunks(text) VALUES (?)'); }
-    #insertVecChunk(): Statement { return this.db.prepare('INSERT INTO vec_chunks(id, embedding) VALUES (?, ?)'); }
-    #insertConcept(): Statement { return this.db.prepare('INSERT INTO concepts(name, description) VALUES (?, ?)'); }
-    #insertVecConcept(): Statement { return this.db.prepare('INSERT INTO vec_concepts(id, embedding) VALUES (?, ?)'); }
+    #insertChunk(): Statement { return this.db.prepare('INSERT INTO chunks(text, embedding) VALUES (?, ?)'); }
+    #insertConcept(): Statement { return this.db.prepare('INSERT INTO concepts(name, description, embedding) VALUES (?, ?, ?)'); }
     #insertEdge(): Statement { return this.db.prepare('INSERT OR IGNORE INTO edges(chunk_id, concept_id) VALUES (?, ?)'); }
 
     #insertChunkTransaction() { 
         return this.db.transaction((chunk: dbo.Chunk, concepts: { concept: dbo.Concept, embedding: string }[], existingConceptIds: number[]) => {
-            chunk.id = BigInt(this.#insertChunk().run(chunk.text).lastInsertRowid);
-            this.#insertVecChunk().run(chunk.id, this.#snaitizeEmbeddings(chunk.embedding));
+            chunk.id = BigInt(this.#insertChunk().run(chunk.text, Buffer.from(chunk.embedding.buffer)).lastInsertRowid);
             
             concepts.forEach(({ concept, embedding }) => {
-                concept.id = BigInt(this.#insertConcept().run(concept.name, concept.description).lastInsertRowid);
-                this.#insertVecConcept().run(concept.id, embedding);
+                concept.id = BigInt(this.#insertConcept().run(concept.name, concept.description, Buffer.from(new Float32Array(JSON.parse(embedding)).buffer)).lastInsertRowid);
                 this.#insertEdge().run(chunk.id, concept.id);
             });
 
@@ -125,24 +114,11 @@ export default class DB {
 
     // #region 'search'
 
-    #chunkVecSearch(): Statement { return this.db.prepare(`
-        SELECT vc.id, c.text, distance
-        FROM vec_chunks as vc
-        JOIN chunks as c on vc.id = c.id
-        WHERE c.outdated = 0 AND embedding MATCH ? AND k = ?
-        ORDER BY distance
-    `); }
     #conceptSearch(): Statement { return this.db.prepare(`
        SELECT *
        FROM concepts
        JOIN edges on concepts.id = edges.concept_id
        WHERE edges.chunk_id = ? 
-    `); }
-    #conceptVecSearch(): Statement { return this.db.prepare(`
-        SELECT id, distance
-        FROM vec_concepts
-        WHERE embedding MATCH ? AND k = ?
-        ORDER BY distance
     `); }
     #conceptFtsSearch(): Statement { return this.db.prepare(`
         SELECT rowid, rank
@@ -165,13 +141,6 @@ export default class DB {
             LIMIT ?
         `);
     }
-    #chunkVecSearchLight(): Statement { return this.db.prepare(`
-        SELECT vc.id, vc.distance
-        FROM vec_chunks vc
-        JOIN chunks c ON vc.id = c.id
-        WHERE c.outdated = 0 AND vc.embedding MATCH ? AND k = ?
-        ORDER BY distance
-    `); }
 
     #getChunk(ids: number[]): ChunkResult[] {
         if (ids.length === 0) return [];
@@ -194,6 +163,19 @@ export default class DB {
 
     constructor(public embedder: Embedder, public reranker: Reranker, options?: { dbPath?: string }) {
         this.#dbPath = options?.dbPath || process.env.SEMANTIC_MEMORY_DB_PATH || './test.db';
+        this.#vectorIndex = new VectorIndex(embedder.numDimensions);
+    }
+
+    public async initVectorIndex(): Promise<void> {
+        this.#vectorIndex.clear();
+        const rows = this.db.prepare('SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL AND outdated = 0').all() as { id: number; embedding: Buffer }[];
+        for (const row of rows) {
+            await this.#vectorIndex.add(row.id, new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4));
+        }
+        const crows = this.db.prepare('SELECT id, embedding FROM concepts WHERE embedding IS NOT NULL').all() as { id: number; embedding: Buffer }[];
+        for (const row of crows) {
+            await this.#vectorIndex.add(row.id, new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4));
+        }
     }
 
     public get db(): Database {
@@ -217,7 +199,7 @@ export default class DB {
             const conceptEmbedding = await this.embedder.embed(this.#conceptText(concept));
             newConcepts.push({
                 concept: { name: concept.name, description: concept.description },
-                embedding: this.#snaitizeEmbeddings(conceptEmbedding)
+                embedding: JSON.stringify(Array.from(conceptEmbedding))
             });
         }
 
@@ -229,6 +211,7 @@ export default class DB {
                 if (properties) {
                     this.setChunkProperties(Number(result.chunk.id!), properties);
                 }
+                this.#vectorIndex.add(Number(result.chunk.id), chunkEmbedding).catch(() => {});
                 resolve(result);
             } catch (err) {
                 reject(err);
@@ -238,17 +221,15 @@ export default class DB {
 
     public setChunkOutdated(id: number): void {
         this.db.prepare('UPDATE chunks SET outdated = 1 WHERE id = ?').run(id);
+        this.#vectorIndex.remove(id).catch(() => {});
     }
 
     public async editConcept(id: number, name: string, description: string): Promise<void> {
-        // Update concepts table (FTS triggers handle concepts_fts sync)
         this.db.prepare('UPDATE concepts SET name = ?, description = ? WHERE id = ?').run(name, description, id);
-
-        // vec0 does not support UPDATE — delete old row + insert new embedding
-        this.db.prepare('DELETE FROM vec_concepts WHERE id = ?').run(id);
-
         const embedding = await this.embedder.embed(this.#conceptText({ name, description }));
-        this.#insertVecConcept().run(BigInt(id), this.#snaitizeEmbeddings(embedding));
+        this.db.prepare('UPDATE concepts SET embedding = ? WHERE id = ?').run(Buffer.from(embedding.buffer), id);
+        await this.#vectorIndex.remove(id);
+        await this.#vectorIndex.add(id, embedding);
     }
 
     public getChunksByIds(ids: number[]): ChunkResult[] {
@@ -276,19 +257,18 @@ export default class DB {
     }
 
     public async semanticSearch(text: string, limit: number): Promise<SemanticSearchResult[]> {
+        if (this.#vectorIndex.size === 0) return [];
         const embedding = await this.embedder.embed(text);
-
-        return new Promise((resolve, reject) => {
-            try { 
-                const chunks: ChunkSearchResult[] = this.#chunkVecSearch().all(this.#snaitizeEmbeddings(embedding), limit) as Array<ChunkSearchResult>; 
-                const concepts: dbo.Concept[][] = chunks.map(chunk => this.#conceptSearch().all(chunk.id)) as Array<Array<dbo.Concept>>;
-                const result: SemanticSearchResult[] = chunks.map((chunk, idx) => {return {chunk: chunk, concepts: concepts[idx]}});
-
-                resolve(result);
-            } catch (err) { 
-                reject(err); 
-            }
-        })
+        const vecResults = await this.#vectorIndex.search(embedding, limit);
+        const ids = vecResults.map(r => r.id);
+        if (ids.length === 0) return [];
+        const placeholders = ids.map(() => '?').join(',');
+        const chunks: ChunkSearchResult[] = this.db.prepare(`SELECT c.id as id, c.text FROM chunks c WHERE c.id IN (${placeholders}) AND c.outdated = 0`).all(...ids) as ChunkSearchResult[];
+        const idOrder = new Map(ids.map((id, i) => [id, i]));
+        chunks.sort((a, b) => (idOrder.get(Number(a.id)) ?? 0) - (idOrder.get(Number(b.id)) ?? 0));
+        chunks.forEach(c => { const r = vecResults.find(v => v.id === Number(c.id)); if (r) (c as any).distance = r.distance; });
+        const concepts: dbo.Concept[][] = chunks.map(chunk => this.#conceptSearch().all(chunk.id)) as Array<Array<dbo.Concept>>;
+        return chunks.map((chunk, idx) => ({ chunk, concepts: concepts[idx] }));
     }
 
     public async keywordSearch(text: String, limit: number): Promise<KeywordSearchResult[]> {
@@ -303,10 +283,12 @@ export default class DB {
     }
 
     public async combinedSearch(text: string, limit: number, filters?: { propertyName: string; value: string; required: boolean }[]): Promise<CombinedSearchResult[]> {
-        const vecResults: VecSearchLightResult[] = this.#chunkVecSearchLight().all(
-            this.#snaitizeEmbeddings(await this.embedder.embed(text)),
+        const vecResults: VecSearchLightResult[] = this.#vectorIndex.size > 0
+            ? (await this.#vectorIndex.search(
+            await this.embedder.embed(text),
             Math.max(10 * limit, FTS_SEARCH_LIMIT)
-        ) as VecSearchLightResult[];
+        )).map(r => ({ id: r.id, distance: r.distance }))
+            : [];
 
         const ftsResults: KeywordSearchResult[] = this.#ftsSearch().all(this.#ftsQuery(text), Math.max(10 * limit, FTS_SEARCH_LIMIT)) as KeywordSearchResult[];
 
@@ -418,10 +400,12 @@ export default class DB {
         }
 
         // Step 2: RRF + reranker on combined name+description
-        const vecResults = this.#conceptVecSearch().all(
-            this.#snaitizeEmbeddings(await this.embedder.embed(searchText)),
+        const vecResults: VecSearchLightResult[] = this.#vectorIndex.size > 0
+            ? (await this.#vectorIndex.search(
+            await this.embedder.embed(searchText),
             Math.max(10 * limit, FTS_SEARCH_LIMIT)
-        ) as VecSearchLightResult[];
+        )).map(r => ({ id: r.id, distance: r.distance }))
+            : [];
 
         const ftsResults = this.#conceptFtsSearch().all(this.#ftsQuery(searchText), Math.max(10 * limit, FTS_SEARCH_LIMIT)) as { rowid: number, rank: number }[];
 

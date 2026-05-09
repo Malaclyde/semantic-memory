@@ -2,22 +2,18 @@
 CREATE TABLE IF NOT EXISTS chunks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT NOT NULL,
+    embedding BLOB,
     outdated INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     access_count INTEGER NOT NULL DEFAULT 0
-);
-
--- virtual extension of the chunks table to store the embeddings
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-    id INTEGER PRIMARY KEY UNIQUE NOT NULL,
-    embedding float[${numDimensions}]
 );
 
 -- concepts table
 CREATE TABLE IF NOT EXISTS concepts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    embedding BLOB
 );
 
 -- concept <-> chunk edges
@@ -27,12 +23,6 @@ CREATE TABLE IF NOT EXISTS edges (
     PRIMARY KEY (chunk_id, concept_id),
     FOREIGN KEY (chunk_id) REFERENCES chunks(id),
     FOREIGN KEY (concept_id) REFERENCES concepts(id)
-);
-
--- virtual extension for concept embeddings
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_concepts USING vec0(
-    id INTEGER PRIMARY KEY UNIQUE NOT NULL,
-    embedding float[${numDimensions}]
 );
 
 -- FTS5 for concepts (keyword search over name + description)

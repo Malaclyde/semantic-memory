@@ -9,6 +9,7 @@ const RERANKER_MODEL = 'Xenova/bge-reranker-base';
 interface ChunkDef {
     text: string;
     concepts: ConceptDef[];
+    properties?: Record<string, string>;
 }
 
 interface ConceptDef {
@@ -50,7 +51,11 @@ const chunks: ChunkDef[] = [
         concepts: [
             { name: "Installation", description: "Installing Crawl4AI via pip and running initial setup" },
             { name: "AsyncWebCrawler", description: "Main asynchronous web crawler class in Crawl4AI" }
-        ]
+        ],
+        properties: {
+            scope: 'setup',
+            sources: JSON.stringify(['https://docs.crawl4ai.com/installation'])
+        }
     },
     {
         text: "To verify your installation, you can run the diagnostics command crawl4ai-doctor. This checks Python version compatibility, verifies Playwright installation, and inspects environment variables. If any issues arise, follow its suggestions and re-run crawl4ai-setup.",
@@ -72,7 +77,11 @@ const chunks: ChunkDef[] = [
         concepts: [
             { name: "Docker", description: "Docker support for Crawl4AI deployment" },
             { name: "Deployment", description: "Deployment options for Crawl4AI including Docker and local server" }
-        ]
+        ],
+        properties: {
+            scope: 'deployment',
+            sources: JSON.stringify(['https://docs.crawl4ai.com/docker'])
+        }
     },
     {
         text: "You can optionally pre-fetch models using crawl4ai-download-models. This step caches large models locally if needed. Only do this if your workflow requires them. The core library installs without any advanced features like transformers or PyTorch included.",
@@ -303,7 +312,11 @@ const chunks: ChunkDef[] = [
         text: "The output confidence score ranges from 0 to 1. 0.0-0.3 means insufficient information needing more crawling. 0.3-0.6 provides partial information that may answer basic queries. 0.6-0.7 offers good coverage for most queries. 0.7-1.0 means excellent coverage with comprehensive information.",
         concepts: [
             { name: "Confidence scoring", description: "Measuring how complete gathered information is during adaptive crawling" }
-        ]
+        ],
+        properties: {
+            scope: 'advanced',
+            sources: JSON.stringify(['https://docs.crawl4ai.com/adaptive'])
+        }
     },
     {
         text: "Best practices for adaptive crawling include using specific descriptive queries. Start with default confidence threshold of 0.7 for general use. Lower to 0.5-0.6 for exploratory crawling. Raise to 0.8 and above for exhaustive coverage. Use appropriate max_pages limits and adjust top_k_links based on site structure.",
@@ -628,7 +641,7 @@ async function seed() {
         }
 
         // Assign new concept IDs in cache after insert
-        const result = await db.insertChunk(chunk.text, newConcepts, existingConceptIds);
+        const result = await db.insertChunk(chunk.text, newConcepts, existingConceptIds, chunk.properties);
 
         // Cache newly created concept IDs
         for (let j = 0; j < newConcepts.length; j++) {

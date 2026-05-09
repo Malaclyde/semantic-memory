@@ -18,11 +18,12 @@ function deleteDb() {
 }
 
 beforeAll(async () => {
-  deleteDb();
-  embedder = new Embedder(EMBEDDING_MODEL.name, EMBEDDING_MODEL.numDimensions);
-  reranker = new Reranker(RERANKER.tokenizer, RERANKER.model);
-  db = new DB(embedder, reranker);
-  db.db; // trigger init
+    deleteDb();
+    embedder = new Embedder(EMBEDDING_MODEL.name, EMBEDDING_MODEL.numDimensions);
+    reranker = new Reranker(RERANKER.tokenizer, RERANKER.model);
+    db = new DB(embedder, reranker, { dbPath: DB_PATH });
+    db.db; // trigger init
+    await db.initVectorIndex();
 }, 180_000);
 
 afterAll(() => {
@@ -43,8 +44,8 @@ describe('DB: Schema', () => {
     expect(names).toContain('edges');
     expect(names).toContain('properties');
     expect(names).toContain('chunk_properties');
-    expect(names).toContain('vec_chunks');
-    expect(names).toContain('vec_concepts');
+    expect(names).not.toContain('vec_chunks');
+    expect(names).not.toContain('vec_concepts');
   });
 
   it('chunks has native columns', () => {

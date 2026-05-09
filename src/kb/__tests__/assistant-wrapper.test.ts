@@ -21,7 +21,7 @@ beforeAll(async () => {
   deleteDb();
   embedder = new Embedder(EMBEDDING_MODEL.name, EMBEDDING_MODEL.numDimensions);
   reranker = new Reranker(RERANKER.tokenizer, RERANKER.model);
-  aw = new AssistantWrapper(embedder, reranker);
+  aw = new AssistantWrapper(embedder, reranker, { dbPath: DB_PATH });
   aw.db;
 }, 180_000);
 

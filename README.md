@@ -18,8 +18,8 @@ A persistent memory backend for AI agents. Stores text chunks with vector embedd
                       │      │      │
               ┌───────┘      │      └───────────┐
               ▼              ▼                  ▼
-       better-sqlite3   sqlite-vec      @huggingface/transformers
-       (SQLite + FTS5)  (vector search)  (embeddings + reranker)
+        better-sqlite3   USearch         @huggingface/transformers
+        (SQLite + FTS5)  (HNSW vec idx)   (embeddings + reranker)
 ```
 
 ## Quick Start
@@ -113,9 +113,7 @@ interface SearchOptions {
 The library uses SQLite with the following tables:
 
 - **chunks** — text storage with native `created_at`, `access_count`, `outdated` columns
-- **vec_chunks** — vector embeddings (via sqlite-vec vec0 virtual table)
 - **concepts** — named entities with name/description
-- **vec_concepts** — concept embeddings (via sqlite-vec)
 - **edges** — many-to-many chunk↔concept links
 - **properties** — EAV property name registry
 - **chunk_properties** — EAV values linked to chunks

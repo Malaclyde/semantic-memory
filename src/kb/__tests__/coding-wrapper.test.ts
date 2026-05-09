@@ -21,7 +21,7 @@ beforeAll(async () => {
   deleteDb();
   embedder = new Embedder(EMBEDDING_MODEL.name, EMBEDDING_MODEL.numDimensions);
   reranker = new Reranker(RERANKER.tokenizer, RERANKER.model);
-  cw = new CodingWrapper(embedder, reranker);
+  cw = new CodingWrapper(embedder, reranker, { dbPath: DB_PATH });
   db = cw;
   // Trigger DB initialization so the file exists
   db.db;
@@ -66,8 +66,8 @@ describe('Phase 2: Schema & Counts', () => {
     expect(names).toContain('edges');
     expect(names).toContain('properties');
     expect(names).toContain('chunk_properties');
-    expect(names).toContain('vec_chunks');
-    expect(names).toContain('vec_concepts');
+    expect(names).not.toContain('vec_chunks');
+    expect(names).not.toContain('vec_concepts');
   });
 
   it('2.2 chunks have native columns', () => {
