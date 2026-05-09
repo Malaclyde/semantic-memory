@@ -1,0 +1,49 @@
+# Manually publish the latest version to PyPI.
+# Reads the latest refs/version/ ref, updates pyproject.toml, builds, and uploads.
+
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Fetch version refs
+        run: git fetch origin "refs/version/*:refs/version/*"
+
+      - name: Read latest version
+        id: version
+        run: |
+          REF=$(git for-each-ref --sort=-creatordate --count=1 --format='%(refname:strip=2)' refs/version)
+          if [ -z "$REF" ]; then
+            echo "No version ref found"
+            exit 1
+          fi
+          echo "version=$REF" >> $GITHUB_OUTPUT
+
+      - name: Set version in pyproject.toml
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          sed -i 's/^version = ".*"/version = "'"$V"'"/' pyproject.toml
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build
+        run: python3 -m build
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python3 -m twine upload dist/*

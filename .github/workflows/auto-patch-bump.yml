@@ -1,0 +1,48 @@
+# Auto-increment patch version on every merge to main.
+# E.g. 0.1.1 → 0.1.2. Updates refs/version/ and pyproject.toml.
+
+name: Auto Patch Bump
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch version refs
+        run: git fetch origin "refs/version/*:refs/version/*"
+
+      - name: Read and bump patch version
+        id: version
+        run: |
+          REF=$(git for-each-ref --sort=-creatordate --count=1 --format='%(refname:strip=2)' refs/version)
+          if [ -z "$REF" ]; then
+            echo "No version ref found, starting at 0.1.0"
+            echo "new_version=0.1.0" >> $GITHUB_OUTPUT
+          else
+            MAJOR=$(echo "$REF" | cut -d. -f1)
+            MINOR=$(echo "$REF" | cut -d. -f2)
+            PATCH=$(echo "$REF" | cut -d. -f3)
+            NEW_PATCH=$((PATCH + 1))
+            echo "new_version=$MAJOR.$MINOR.$NEW_PATCH" >> $GITHUB_OUTPUT
+            echo "Bumping $REF → $MAJOR.$MINOR.$NEW_PATCH"
+          fi
+
+      - name: Create version ref
+        run: |
+          git update-ref "refs/version/${{ steps.version.outputs.new_version }}" HEAD
+          git push origin "refs/version/${{ steps.version.outputs.new_version }}"
+
+      - name: Update pyproject.toml
+        run: |
+          V="${{ steps.version.outputs.new_version }}"
+          sed -i 's/^version = ".*"/version = "'"$V"'"/' pyproject.toml
+          git add pyproject.toml
+          git -c user.name="crawler-bot" -c user.email="bot@malaclyde.dev" commit -m "Bump version to $V"
+          git push
