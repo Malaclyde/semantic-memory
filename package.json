@@ -1,6 +1,6 @@
 {
   "name": "@malaclyde/knowledge-base",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Persistent memory backend for AI agents with vector search, FTS5, reranker, and EAV metadata",
   "type": "module",
   "main": "./src/index.ts",
