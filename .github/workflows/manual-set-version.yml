@@ -27,6 +27,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate app token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.GH_ACTIONS_APP_ID }}
+          private-key: ${{ secrets.GH_ACTIONS_APP_PRIVATE_KEY }}
+
+      - name: Configure git auth
+        run: |
+          git remote set-url origin https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com/${{ github.repository }}.git
+
       - name: Build version string
         id: version
         run: |
@@ -38,10 +49,23 @@ jobs:
           git update-ref "refs/version/${{ steps.version.outputs.new_version }}" HEAD
           git push origin "refs/version/${{ steps.version.outputs.new_version }}"
 
-      - name: Update pyproject.toml
+      - name: Update package.json files
         run: |
           V="${{ steps.version.outputs.new_version }}"
-          sed -i 's/^version = ".*"/version = "'"$V"'"/' pyproject.toml
-          git add pyproject.toml
+          for pkg in package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json; do
+            node -e "
+              const p = require('./$pkg');
+              p.version = '$V';
+              if (p.dependencies && p.dependencies['@malaclyde/knowledge-base']) {
+                p.dependencies['@malaclyde/knowledge-base'] = '^$V';
+              }
+              require('fs').writeFileSync('./$pkg', JSON.stringify(p, null, 2) + '\n');
+            "
+          done
+
+      - name: Commit and push
+        run: |
+          V="${{ steps.version.outputs.new_version }}"
+          git add package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json
           git -c user.name="crawler-bot" -c user.email="bot@malaclyde.dev" commit -m "Set version to $V"
           git push
