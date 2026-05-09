@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import { createDatabase } from './sqlite-adapter';
+import type { Database, Statement } from './sqlite-adapter';
 import * as sqlite from 'sqlite-vec';
 import * as path from 'path';
 import * as fs from 'node:fs';
@@ -51,11 +52,11 @@ export interface ConceptSearchResult {
 }
 
 export default class DB {
-    #db: Database.Database | undefined
+    #db: Database | undefined
     #dbPath: string
     
-    #init(): Database.Database {
-        var db = new Database(this.#dbPath);
+    #init(): Database {
+        var db = createDatabase(this.#dbPath);
 
         try {
             sqlite.load(db);
@@ -92,11 +93,11 @@ export default class DB {
 
     // #region 'insert'
 
-    #insertChunk(): Database.Statement { return this.db.prepare('INSERT INTO chunks(text) VALUES (?)'); }
-    #insertVecChunk(): Database.Statement { return this.db.prepare('INSERT INTO vec_chunks(id, embedding) VALUES (?, ?)'); }
-    #insertConcept(): Database.Statement { return this.db.prepare('INSERT INTO concepts(name, description) VALUES (?, ?)'); }
-    #insertVecConcept(): Database.Statement { return this.db.prepare('INSERT INTO vec_concepts(id, embedding) VALUES (?, ?)'); }
-    #insertEdge(): Database.Statement { return this.db.prepare('INSERT OR IGNORE INTO edges(chunk_id, concept_id) VALUES (?, ?)'); }
+    #insertChunk(): Statement { return this.db.prepare('INSERT INTO chunks(text) VALUES (?)'); }
+    #insertVecChunk(): Statement { return this.db.prepare('INSERT INTO vec_chunks(id, embedding) VALUES (?, ?)'); }
+    #insertConcept(): Statement { return this.db.prepare('INSERT INTO concepts(name, description) VALUES (?, ?)'); }
+    #insertVecConcept(): Statement { return this.db.prepare('INSERT INTO vec_concepts(id, embedding) VALUES (?, ?)'); }
+    #insertEdge(): Statement { return this.db.prepare('INSERT OR IGNORE INTO edges(chunk_id, concept_id) VALUES (?, ?)'); }
 
     #insertChunkTransaction() { 
         return this.db.transaction((chunk: dbo.Chunk, concepts: { concept: dbo.Concept, embedding: string }[], existingConceptIds: number[]) => {
@@ -121,38 +122,38 @@ export default class DB {
 
     // #region 'search'
 
-    #chunkVecSearch(): Database.Statement { return this.db.prepare(`
+    #chunkVecSearch(): Statement { return this.db.prepare(`
         SELECT vc.id, c.text, distance
         FROM vec_chunks as vc
         JOIN chunks as c on vc.id = c.id
         WHERE c.outdated = 0 AND embedding MATCH ? AND k = ?
         ORDER BY distance
     `); }
-    #conceptSearch(): Database.Statement { return this.db.prepare(`
+    #conceptSearch(): Statement { return this.db.prepare(`
        SELECT *
        FROM concepts
        JOIN edges on concepts.id = edges.concept_id
        WHERE edges.chunk_id = ? 
     `); }
-    #conceptVecSearch(): Database.Statement { return this.db.prepare(`
+    #conceptVecSearch(): Statement { return this.db.prepare(`
         SELECT id, distance
         FROM vec_concepts
         WHERE embedding MATCH ? AND k = ?
         ORDER BY distance
     `); }
-    #conceptFtsSearch(): Database.Statement { return this.db.prepare(`
+    #conceptFtsSearch(): Statement { return this.db.prepare(`
         SELECT rowid, rank
         FROM concepts_fts
         WHERE concepts_fts MATCH ?
         LIMIT ?
     `); }
-    #conceptFtsNameSearch(): Database.Statement { return this.db.prepare(`
+    #conceptFtsNameSearch(): Statement { return this.db.prepare(`
         SELECT rowid, rank
         FROM concepts_fts
         WHERE name MATCH ?
         LIMIT ?
     `); }
-    #ftsSearch(): Database.Statement {
+    #ftsSearch(): Statement {
         return this.db.prepare(`
             SELECT c.id as rowid, c.text, f.rank
             FROM chunks_fts f
@@ -161,7 +162,7 @@ export default class DB {
             LIMIT ?
         `);
     }
-    #chunkVecSearchLight(): Database.Statement { return this.db.prepare(`
+    #chunkVecSearchLight(): Statement { return this.db.prepare(`
         SELECT vc.id, vc.distance
         FROM vec_chunks vc
         JOIN chunks c ON vc.id = c.id
@@ -192,7 +193,7 @@ export default class DB {
         this.#dbPath = options?.dbPath || process.env.SEMANTIC_MEMORY_DB_PATH || './test.db';
     }
 
-    public get db(): Database.Database {
+    public get db(): Database {
         if (!this.#db) {
             this.#db = this.#init();
         }

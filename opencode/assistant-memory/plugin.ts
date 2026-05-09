@@ -1,8 +1,8 @@
 import { tool } from "@opencode-ai/plugin";
 import type { PluginInput, PluginOptions, Hooks } from "@opencode-ai/plugin";
-import { execSync } from "child_process";
-import { existsSync } from "fs";
-import { createRequire } from "module";
+import { AssistantWrapper } from "@malaclyde/knowledge-base";
+import Embedder from "@malaclyde/knowledge-base/kb/embedder";
+import Reranker from "@malaclyde/knowledge-base/kb/reranker";
 import path from "path";
 import os from "os";
 
@@ -12,31 +12,6 @@ function resolveDbPath(dbPathOption: string | undefined, projectDir: string): st
   }
   return path.join(projectDir, ".opencode", "semantic-memory", "memory.db");
 }
-
-// OpenCode installs npm plugins with ignoreScripts: true, which prevents
-// better-sqlite3's install script (prebuild-install || node-gyp rebuild)
-// from running. We ensure the native binding is built here.
-function ensureNativeBinding(): void {
-  const _require = createRequire(import.meta.url);
-  let bsPath: string;
-  try {
-    bsPath = path.dirname(_require.resolve('better-sqlite3/package.json'));
-  } catch {
-    return;
-  }
-  if (existsSync(path.join(bsPath, 'build', 'Release', 'better_sqlite3.node'))) return;
-  try {
-    execSync('npx --yes prebuild-install', { cwd: bsPath, stdio: 'pipe', timeout: 30000 });
-  } catch {
-    execSync('npx --yes node-gyp rebuild --release', { cwd: bsPath, stdio: 'pipe', timeout: 120000 });
-  }
-}
-
-ensureNativeBinding();
-
-const { AssistantWrapper } = await import('@malaclyde/knowledge-base');
-const { default: Embedder } = await import('@malaclyde/knowledge-base/kb/embedder');
-const { default: Reranker } = await import('@malaclyde/knowledge-base/kb/reranker');
 
 const embedder = new Embedder("Xenova/all-MiniLM-L6-v2", 384);
 const reranker = new Reranker("Xenova/bge-reranker-base", "Xenova/bge-reranker-base");
