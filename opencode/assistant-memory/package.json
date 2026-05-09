@@ -1,6 +1,6 @@
 {
   "name": "@malaclyde/assistant-memory-oc",
-  "version": "0.1.1",
+  "version": "0.0.5",
   "description": "Memory tools for personal assistant agents — plugin for OpenCode",
   "type": "module",
   "main": "./plugin.ts",
