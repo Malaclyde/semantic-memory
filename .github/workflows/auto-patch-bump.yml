@@ -24,6 +24,7 @@ jobs:
 
       - name: Configure git auth
         run: |
+          git config --unset-all http.https://github.com/.extraheader
           git remote set-url origin https://x-access-token:${{ steps.generate-token.outputs.token }}@github.com/${{ github.repository }}.git
 
       - name: Fetch version refs
@@ -48,7 +49,7 @@ jobs:
       - name: Create version ref
         run: |
           git update-ref "refs/version/${{ steps.version.outputs.new_version }}" HEAD
-          git push origin "refs/version/${{ steps.version.outputs.new_version }}"
+          git push --force origin "refs/version/${{ steps.version.outputs.new_version }}"
 
       - name: Update package.json files
         run: |
@@ -69,5 +70,5 @@ jobs:
         run: |
           V="${{ steps.version.outputs.new_version }}"
           git add package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json
-          git -c user.name="crawler-bot" -c user.email="bot@malaclyde.dev" commit -m "Bump version to $V"
+          git -c user.name="gh-actions" -c user.email="actions@github.com" commit -m "Bump version to $V"
           git push --force
