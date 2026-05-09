@@ -18,10 +18,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: "https://registry.npmjs.org"
 
-      - name: Upgrade npm for OIDC support
-        run: npm install -g npm@11
+      - name: Install dependencies
+        run: npm ci
+
+      - name: list npm version
+        run: npm --version
 
       - name: Generate app token
         id: generate-token
@@ -60,19 +63,16 @@ jobs:
             "
           done
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Publish @malaclyde/knowledge-base
-        run: npm publish --access public
+        run: npx -p npm@11 npm publish --access public
 
       - name: Publish @malaclyde/coding-memory-oc
         working-directory: opencode/coding-memory
-        run: npm publish --access public
+        run: npx -p npm@11 npm publish --access public
 
       - name: Publish @malaclyde/assistant-memory-oc
         working-directory: opencode/assistant-memory
-        run: npm publish --access public
+        run: npx -p npm@11 npm publish --access public
 
       - name: Commit version bumps
         run: |
