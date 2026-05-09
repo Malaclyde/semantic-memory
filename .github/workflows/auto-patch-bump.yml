@@ -58,10 +58,6 @@ jobs:
             node -e "
               const p = require('./$pkg');
               p.version = '$V';
-              // Update the knowledge-base dep version in plugin packages
-              if (p.dependencies && p.dependencies['@malaclyde/knowledge-base']) {
-                p.dependencies['@malaclyde/knowledge-base'] = '^$V';
-              }
               require('fs').writeFileSync('./$pkg', JSON.stringify(p, null, 2) + '\n');
             "
           done

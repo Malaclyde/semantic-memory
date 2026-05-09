@@ -57,9 +57,6 @@ jobs:
             node -e "
               const p = require('./$pkg');
               p.version = '$V';
-              if (p.dependencies && p.dependencies['@malaclyde/knowledge-base']) {
-                p.dependencies['@malaclyde/knowledge-base'] = '^$V';
-              }
               require('fs').writeFileSync('./$pkg', JSON.stringify(p, null, 2) + '\n');
             "
           done

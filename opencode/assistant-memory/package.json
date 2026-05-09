@@ -14,7 +14,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@malaclyde/knowledge-base": "^0.1.1",
+    "@malaclyde/knowledge-base": "*",
     "@opencode-ai/plugin": "^1.14.0"
   },
   "license": "MIT"
