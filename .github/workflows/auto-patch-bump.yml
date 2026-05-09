@@ -24,7 +24,7 @@ jobs:
           REF=$(git for-each-ref --sort=-creatordate --count=1 --format='%(refname:strip=2)' refs/version)
           if [ -z "$REF" ]; then
             echo "No version ref found, starting at 0.1.0"
-            echo "new_version=0.1.0" >> $GITHUB_OUTPUT
+            echo "new_version=0.0.1" >> $GITHUB_OUTPUT
           else
             MAJOR=$(echo "$REF" | cut -d. -f1)
             MINOR=$(echo "$REF" | cut -d. -f2)
