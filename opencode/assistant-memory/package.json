@@ -1,0 +1,21 @@
+{
+  "name": "@malaclyde/assistant-memory-oc",
+  "version": "0.0.2",
+  "description": "Memory tools for personal assistant agents — plugin for OpenCode",
+  "type": "module",
+  "main": "./plugin.ts",
+  "types": "./plugin.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Malaclyde/semantic-memory.git"
+  },
+  "files": [
+    "plugin.ts",
+    "README.md"
+  ],
+  "dependencies": {
+    "@malaclyde/knowledge-base": "^0.0.2",
+    "@opencode-ai/plugin": "^1.14.0"
+  },
+  "license": "MIT"
+}

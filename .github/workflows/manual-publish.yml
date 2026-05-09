@@ -1,10 +1,11 @@
-# Manually publish the latest version to PyPI.
-# Reads the latest refs/version/ ref, updates pyproject.toml, builds, and uploads.
-
-name: Publish to PyPI
+name: Publish to npm
 
 on:
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   publish:
@@ -14,9 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.13"
+          node-version: 22
 
       - name: Fetch version refs
         run: git fetch origin "refs/version/*:refs/version/*"
@@ -31,19 +32,28 @@ jobs:
           fi
           echo "version=$REF" >> $GITHUB_OUTPUT
 
-      - name: Set version in pyproject.toml
+      - name: Set version in package.json files
         run: |
           V="${{ steps.version.outputs.version }}"
-          sed -i 's/^version = ".*"/version = "'"$V"'"/' pyproject.toml
+          for pkg in package.json opencode/coding-memory/package.json opencode/assistant-memory/package.json; do
+            echo "Updating $pkg to $V"
+            node -e "
+              const p = require('./$pkg');
+              p.version = '$V';
+              require('fs').writeFileSync('./$pkg', JSON.stringify(p, null, 2) + '\n');
+            "
+          done
 
-      - name: Install build tools
-        run: pip install build twine
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build
-        run: python3 -m build
+      - name: Publish @malaclyde/knowledge-base
+        run: npm publish --provenance --access public
 
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: python3 -m twine upload dist/*
+      - name: Publish @malaclyde/coding-memory-oc
+        working-directory: opencode/coding-memory
+        run: npm publish --provenance --access public
+
+      - name: Publish @malaclyde/assistant-memory-oc
+        working-directory: opencode/assistant-memory
+        run: npm publish --provenance --access public

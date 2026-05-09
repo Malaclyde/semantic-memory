@@ -6,9 +6,6 @@ import Embedder from './embedder';
 import * as dbo from './dbo';
 import Reranker from './reranker';
 
-const DB_FILE_LOCATION: string = ".";
-const DB_FILE_NAME = "test.db";
-const DB_PATH: string = process.env.SEMANTIC_MEMORY_DB_PATH || path.join(DB_FILE_LOCATION, DB_FILE_NAME);
 const FTS_SEARCH_LIMIT = 50;
 
 export interface Concept {
@@ -55,9 +52,10 @@ export interface ConceptSearchResult {
 
 export default class DB {
     #db: Database.Database | undefined
+    #dbPath: string
     
     #init(): Database.Database {
-        var db = new Database(DB_PATH);
+        var db = new Database(this.#dbPath);
 
         try {
             sqlite.load(db);
@@ -190,7 +188,9 @@ export default class DB {
 
     // #endregion 'search'
 
-    constructor(public embedder: Embedder, public reranker: Reranker) {}
+    constructor(public embedder: Embedder, public reranker: Reranker, options?: { dbPath?: string }) {
+        this.#dbPath = options?.dbPath || process.env.SEMANTIC_MEMORY_DB_PATH || './test.db';
+    }
 
     public get db(): Database.Database {
         if (!this.#db) {

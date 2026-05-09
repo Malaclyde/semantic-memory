@@ -1,8 +1,9 @@
-- [ ] README.md for the whole project
-- [ ] README.md for the opencode plugins
+- [x] README.md for the whole project
+- [x] README.md for the opencode plugins
 - [ ] opencode plugins test
 - [ ] `npm publish` of the whole project
 - [ ] `npm publish` of the opencode plugins
 - [ ] github workflows
 - [ ] CONTRIBUTING.md
 - [ ] db connection string to a real database
+- [ ] graph viewer to launch automatically from opencode / harness

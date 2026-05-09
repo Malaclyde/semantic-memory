@@ -25,7 +25,7 @@ A persistent memory backend for AI agents. Stores text chunks with vector embedd
 ## Quick Start
 
 ```typescript
-import { Embedder, Reranker, CodingWrapper } from 'semantic-memory';
+import { Embedder, Reranker, CodingWrapper } from '@malaclyde/knowledge-base';
 
 const embedder = new Embedder('Xenova/all-MiniLM-L6-v2', 384);
 const reranker = new Reranker('Xenova/bge-reranker-base', 'Xenova/bge-reranker-base');
@@ -126,8 +126,8 @@ The library uses SQLite with the following tables:
 
 This library is distributed with two OpenCode plugins:
 
-- **@semantic-memory/coding** — memory tools for coding agents (`opencode/coding-memory/`)
-- **@semantic-memory/assistant** — memory tools for personal assistant agents (`opencode/assistant-memory/`)
+- **@malaclyde/coding-memory-oc** — memory tools for coding agents (`opencode/coding-memory/`)
+- **@malaclyde/assistant-memory-oc** — memory tools for personal assistant agents (`opencode/assistant-memory/`)
 
 See their respective README files for usage and configuration.
 

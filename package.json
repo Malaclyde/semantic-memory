@@ -1,6 +1,6 @@
 {
-  "name": "semantic-memory",
-  "version": "0.1.0",
+  "name": "@malaclyde/knowledge-base",
+  "version": "0.0.2",
   "description": "Persistent memory backend for AI agents with vector search, FTS5, reranker, and EAV metadata",
   "type": "module",
   "main": "./src/index.ts",
@@ -10,26 +10,29 @@
     "./kb/embedder": "./src/kb/embedder.ts",
     "./kb/reranker": "./src/kb/reranker.ts",
     "./kb/db": "./src/kb/db.ts",
-    "./kb/dbo": "./src/kb/dbo.ts"
+    "./kb/dbo": "./src/kb/dbo.ts",
+    "./kb/wrappers/coding": "./src/kb/wrappers/coding.ts",
+    "./kb/wrappers/assistant": "./src/kb/wrappers/assistant.ts",
+    "./kb/wrappers/base": "./src/kb/wrappers/base.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Malaclyde/semantic-memory.git"
   },
   "files": [
     "src/",
-    "opencode/",
     "README.md",
     "LICENSE"
+  ],
+  "workspaces": [
+    ".",
+    "opencode/coding-memory",
+    "opencode/assistant-memory"
   ],
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "better-sqlite3": "^12.9.0",
     "sqlite-vec": "^0.1.9"
-  },
-  "peerDependencies": {
-    "@opencode-ai/plugin": "^7.x"
-  },
-  "peerDependenciesMeta": {
-    "@opencode-ai/plugin": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
