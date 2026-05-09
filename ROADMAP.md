@@ -1,9 +1,10 @@
 - [x] README.md for the whole project
 - [x] README.md for the opencode plugins
 - [ ] opencode plugins test
-- [ ] `npm publish` of the whole project
-- [ ] `npm publish` of the opencode plugins
-- [ ] github workflows
+- [x] `npm publish` of the whole project
+- [x] `npm publish` of the opencode plugins
+- [x] github workflows
 - [ ] CONTRIBUTING.md
 - [ ] db connection string to a real database
 - [ ] graph viewer to launch automatically from opencode / harness
+- [ ] `main.ts` and `seed.ts` file cleanup

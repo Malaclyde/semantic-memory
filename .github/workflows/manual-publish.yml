@@ -23,9 +23,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: list npm version
-        run: npm --version
-
       - name: Generate app token
         id: generate-token
         uses: actions/create-github-app-token@v2
