@@ -1,6 +1,6 @@
 {
   "name": "@malaclyde/coding-memory-oc",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Memory tools for coding agents — plugin for OpenCode",
   "type": "module",
   "main": "./plugin.ts",
