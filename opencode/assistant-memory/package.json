@@ -7,7 +7,7 @@
   "types": "./plugin.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Malaclyde/semantic-memory.git"
+    "url": "https://github.com/Malaclyde/semantic-memory"
   },
   "files": [
     "plugin.ts",
