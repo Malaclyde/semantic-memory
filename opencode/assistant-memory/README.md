@@ -42,6 +42,29 @@ are transitive dependencies.
 
 Node.js 18+
 
+**macOS only:** If you see the following warning in the OpenCode TUI:
+
+```
+objc[XXXX]: Class GNotificationCenterDelegate is implemented in both
+  .../node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib
+and
+  .../.config/opencode/node_modules/sharp/vendor/.../libvips-cpp.42.dylib
+This may cause spurious casting failures and mysterious crashes.
+One of the duplicates must be removed or renamed.
+```
+
+Set this environment variable before starting OpenCode:
+
+```bash
+export OBJC_DEBUG_DUPLICATE_CLASSES=NO
+opencode
+```
+
+Or add it to your `~/.zshrc` (or `~/.bashrc`):
+
+```bash
+export OBJC_DEBUG_DUPLICATE_CLASSES=NO
+```
 ## License
 
 MIT

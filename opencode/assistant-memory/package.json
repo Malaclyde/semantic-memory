@@ -17,5 +17,8 @@
     "@malaclyde/knowledge-base": "*",
     "@opencode-ai/plugin": "^1.14.0"
   },
+  "overrides": {
+    "@img/sharp-libvips-darwin-arm64": "0.0.0"
+  },
   "license": "MIT"
 }

@@ -23,11 +23,11 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
   const memory = new CodingWrapper(embedder, reranker, { dbPath });
 
   const search_memory = tool({
-    description: "Search stored knowledge using semantic + keyword + reranker fusion. Supports scope filtering and date range limits.",
+    description: "Search knowledge base for stored facts, decisions, conventions, and research results. Results include relevance scores. Filter by scope (component, service, subsystem name) and optional date range. Set strict_scope=false to also include unscoped chunks alongside scope match.",
     args: {
       query: tool.schema.string().describe("The search query"),
       limit: tool.schema.number().default(5).describe("Max results"),
-      scope: tool.schema.string().optional().describe("Scope filter (e.g. 'frontend', 'backend'). Requires strict_scope=true to exclude unscoped chunks."),
+      scope: tool.schema.string().optional().describe("Scope filter (e.g. a service or module name). Requires strict_scope=true to exclude unscoped chunks."),
       strict_scope: tool.schema.boolean().optional().describe("If true, only chunks with the exact scope match. If false, also includes chunks without any scope. Default: true."),
       older_than: tool.schema.string().optional().describe("ISO 8601 date string. Only return chunks created before this date (e.g. '2026-01-01' or '2026-01-01T00:00:00')."),
       younger_than: tool.schema.string().optional().describe("ISO 8601 date string. Only return chunks created after this date."),
@@ -58,23 +58,38 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
   });
 
   const store_memory = tool({
-    description: "Store a new fact into knowledge base. Use scope to organize knowledge by project area (e.g. 'frontend', 'backend', 'api'). Unscoped chunks match all searches.",
+    description: "Store fact in persistent memory. Use scope to organize by component, service, or subsystem; unscoped entries appear in all searches.\n\nRules:\n- 3–5 sentences per entry, ONE narrow topic only\n- Focus on factual essence, not changes to specific plan\n- Before calling, use `find_concept` to reuse existing concept names\n\nBad (too long, two unrelated topics, plan-specific calculation):\ntext: \"Gumroad charges 10% + $0.50 plus 2.9% card processing, so a €29 product costs €4.48 in fees. Austrian side income for employees is taxed at marginal rate...\" [cut 25 more lines]\nconcepts: [\"Gumroad\", \"Austrian Tax\"]\n\nGood — split into focused chunks:\n① text: \"Gumroad operates as the Merchant of Record, handling EU VAT globally. Its direct-sale fee structure combines a 10% platform fee plus $0.50 with a separate 2.9% plus $0.30 card processing fee. Discover marketplace sales are a flat 30% rate including processing costs.\"\nconcepts: [\"Gumroad\", \"Merchant of Record\", \"Platform Fees\", \"Payment Processing\"]\nsources: [\"https://gumroad.com/pricing\"]\n\n② text: \"In Austria the annual tax-free amount (Grundfreibetrag) applies to total income, not side income separately. For employees, all side business income is taxed at the highest marginal rate, as lower brackets are consumed by the primary salary.\"\nconcepts: [\"Austrian Tax Law\", \"Marginal Tax Rate\", \"Grundfreibetrag\", \"Side Business\"]\nsources: [\"https://bmf.gv.at\"]\n\nTriggers:\n- Completed research → split findings into 3–5 sentence chunks, store each\n- Discovered fact/constraint/convention → store it\n\nIf concept name already exists, linked automatically. Response includes existing concept ID and description. If wrong concept linked, use `unlink_concept(chunk_id, concept_id)` to detach.",
     args: {
       text: tool.schema.string().describe("The fact or knowledge to store"),
       concepts: tool.schema.array(tool.schema.string()).optional().describe("Tag concepts"),
       existingConceptIds: tool.schema.array(tool.schema.number()).optional().describe("Reuse existing concept IDs"),
       sources: tool.schema.array(tool.schema.string()).optional().describe("Source URLs"),
-      scope: tool.schema.string().optional().describe("Project area scope (e.g. 'frontend', 'backend'). Chunks without scope are found by all searches."),
+      scope: tool.schema.string().optional().describe("Project area scope (e.g. a service or module name). Chunks without scope are found by all searches."),
     },
     async execute(args) {
       const concepts = (args.concepts || []).map(name => ({ name }));
       const result = await memory.store(args.text, concepts, args.existingConceptIds, args.sources, args.scope);
-      return { output: JSON.stringify({ chunkId: Number(result.chunk.id), conceptIds: result.concepts.map(c => Number(c.id)) }) };
+
+      let output = JSON.stringify({
+        chunkId: Number(result.chunk.id),
+        conceptIds: result.concepts.map(c => Number(c.id)),
+      });
+
+      if (result.notes && result.notes.length > 0) {
+        const lines = result.notes.map(n =>
+          `- "${n.name}" (ID: ${n.id}) — ${n.description}`
+        );
+        output += "\n\nNote: the following concepts already existed and were linked automatically:";
+        output += "\n" + lines.join("\n");
+        output += "\n\nIf any of these are incorrect, use `unlink_concept(chunk_id, concept_id)` to detach them.";
+      }
+
+      return { output };
     },
   });
 
   const find_concept = tool({
-    description: "Find a concept by name or description",
+    description: "Find existing concepts by name or description. Always call before store_memory to check if concept exists — reuse exact names to merge related chunks under shared concepts, avoid duplicates. Pass found concept IDs to store_memory via existingConceptIds to link.",
     args: {
       name: tool.schema.string().describe("Concept name"),
       description: tool.schema.string().optional().describe("Optional description"),
@@ -92,7 +107,7 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
   });
 
   const get_chunks = tool({
-    description: "Retrieve full chunk texts by their IDs, including metadata",
+    description: "Retrieve full chunk texts by ID. Use to load complete text for chunks referenced by ID in system prompt or conversation context. Returns full text with created_at, access_count, sources metadata.",
     args: {
       ids: tool.schema.array(tool.schema.number()).describe("Chunk IDs"),
     },
@@ -116,21 +131,49 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
   });
 
   const merge_memories = tool({
-    description: "Merge multiple chunks into one consolidated chunk",
+    description: "Merge multiple chunks covering same narrow topic into one consolidated entry. Source chunks marked outdated; merged result replaces them. Merged text must still follow 3–5 sentence rule.\n\nIf concept name already exists, linked automatically (same dedup behavior as store_memory). Use existingConceptIds to pass pre-looked-up concept IDs.",
     args: {
       sourceIds: tool.schema.array(tool.schema.number()).describe("Chunk IDs to merge"),
       targetText: tool.schema.string().describe("Consolidated text"),
-      concepts: tool.schema.array(tool.schema.string()).optional().describe("Tag concepts"),
+      concepts: tool.schema.array(tool.schema.string()).optional().describe("Concept names"),
+      existingConceptIds: tool.schema.array(tool.schema.number()).optional().describe("IDs of existing concepts to link"),
     },
     async execute(args) {
       const concepts = (args.concepts || []).map(name => ({ name }));
-      const result = await memory.merge(args.sourceIds, args.targetText, concepts);
-      return { output: JSON.stringify({ newChunkId: Number(result.chunk.id) }) };
+      const result = await memory.merge(args.sourceIds, args.targetText, concepts, args.existingConceptIds);
+
+      let output = JSON.stringify({ newChunkId: Number(result.chunk.id) });
+
+      if (result.notes && result.notes.length > 0) {
+        const lines = result.notes.map(n =>
+          `- "${n.name}" (ID: ${n.id}) — ${n.description}`
+        );
+        output += "\n\nNote: the following concepts already existed and were linked automatically:";
+        output += "\n" + lines.join("\n");
+        output += "\n\nIf any of these are incorrect, use `unlink_concept(chunk_id, concept_id)` to detach them.";
+      }
+
+      return { output };
+    },
+  });
+
+  const unlink_concept = tool({
+    description: "Detach concept from chunk without deleting chunk. Use when chunk linked to wrong concept and you want to fix tag without losing stored information.",
+    args: {
+      chunk_id: tool.schema.number().describe("ID of the chunk to unlink from"),
+      concept_id: tool.schema.number().describe("ID of the concept to detach"),
+    },
+    async execute(args) {
+      const deleted = await memory.unlinkConcept(args.chunk_id, args.concept_id);
+      if (deleted === 0) {
+        return { output: "No such edge exists. The chunk may already be unlinked from this concept, or the IDs may be wrong." };
+      }
+      return { output: `Concept ${args.concept_id} unlinked from chunk ${args.chunk_id}. To link a replacement concept, use \`store_memory\` with \`existingConceptIds\` or \`merge_memories\`.` };
     },
   });
 
   const set_outdated = tool({
-    description: "Mark a chunk as outdated (hidden from results)",
+    description: "Mark chunk as outdated, hiding from all future searches. If replacing obsolete information: call set_outdated on old chunk, then store_memory the corrected entry with appropriate concepts.\n\nTrigger: you retrieved information you know to be false → set it outdated, then store corrected version.",
     args: {
       id: tool.schema.number().describe("Chunk ID to mark outdated"),
     },
@@ -147,7 +190,25 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
       find_concept,
       get_chunks,
       merge_memories,
+      unlink_concept,
       set_outdated,
+    },
+    "experimental.chat.system.transform": async (_input, output) => {
+      const chunks = memory.getImportantChunks(5)
+      if (chunks.length === 0) return
+
+      const header = [
+        "<semantic-memory>",
+        "The 5 most important facts from the project knowledge base, selected by recency and access frequency.",
+        "Use `search_memory` to find additional context by keyword, concept, or date range.",
+        "",
+      ].join("\n")
+
+      const body = chunks
+        .map((c, i) => `${i + 1}. [ID: ${c.id}] ${c.text}`)
+        .join("\n")
+
+      output.system.push(header + body + "\n</semantic-memory>")
     },
   };
 }

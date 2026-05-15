@@ -1,5 +1,5 @@
 export { default as DB } from './kb/db';
-export type { Concept, ChunkSearchResult, SemanticSearchResult, KeywordSearchResult, VecSearchLightResult, ChunkResult, CombinedSearchResult, ConceptSearchResult } from './kb/db';
+export type { Concept, ChunkSearchResult, SemanticSearchResult, KeywordSearchResult, VecSearchLightResult, ChunkResult, CombinedSearchResult, ConceptSearchResult, ShadowChunkResult } from './kb/db';
 export type { Chunk, Concept as DBOConcept } from './kb/dbo';
 export { VectorIndex } from './kb/vector-index';
 export type { SearchResult } from './kb/vector-index';

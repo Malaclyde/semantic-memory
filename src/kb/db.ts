@@ -56,6 +56,13 @@ export interface ConceptSearchResult {
     score: number
 }
 
+export interface ShadowChunkResult {
+    id: number;
+    text: string;
+    properties: { name: string; value: string }[];
+    concepts: { id: number; name: string; description: string }[];
+}
+
 export default class DB {
     #db: Database | undefined
     #dbPath: string
@@ -71,7 +78,32 @@ export default class DB {
             console.error(`failed to initialize the db: ${error}`)
             throw error;
         }
-        
+
+        // Migration: ensure UNIQUE constraint on concepts.name
+        const uniqueIdx = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='concepts' AND name='uq_concepts_name'"
+        ).get() as any;
+        if (!uniqueIdx) {
+            // Step 1: For each duplicate name, repoint edges from stale IDs to canonical ID
+            db.exec(`
+                CREATE TEMP TABLE _dup_map AS
+                SELECT name, id AS stale_id, MIN(id) OVER (PARTITION BY name) AS canonical_id
+                FROM concepts;
+                
+                DELETE FROM _dup_map WHERE stale_id = canonical_id;
+                
+                UPDATE edges
+                SET concept_id = (SELECT canonical_id FROM _dup_map WHERE stale_id = edges.concept_id)
+                WHERE concept_id IN (SELECT stale_id FROM _dup_map);
+                
+                DELETE FROM concepts WHERE id IN (SELECT stale_id FROM _dup_map);
+                
+                DROP TABLE _dup_map;
+            `);
+            // Step 2: Add unique index
+            db.exec("CREATE UNIQUE INDEX uq_concepts_name ON concepts(name)");
+        }
+
         return db;
     }
 
@@ -159,6 +191,49 @@ export default class DB {
         if (ids.length === 0) return;
         const placeholders = ids.map(() => '?').join(',');
         this.db.prepare(`UPDATE chunks SET access_count = access_count + 1 WHERE id IN (${placeholders})`).run(...ids);
+    }
+
+    #assembleShadowResults(rows: { id: number; text: string }[]): ShadowChunkResult[] {
+        if (rows.length === 0) return [];
+        const ids = rows.map(r => r.id);
+        const placeholders = ids.map(() => '?').join(',');
+
+        const propRows = this.db.prepare(`
+            SELECT cp.chunk_id, p.name, cp.value
+            FROM chunk_properties cp
+            JOIN properties p ON cp.property_id = p.id
+            WHERE cp.chunk_id IN (${placeholders})
+        `).all(...ids) as { chunk_id: number; name: string; value: string }[];
+
+        const conceptRows = this.db.prepare(`
+            SELECT e.chunk_id, c.id, c.name, substr(c.description, 1, 100) as description
+            FROM edges e
+            JOIN concepts c ON e.concept_id = c.id
+            WHERE e.chunk_id IN (${placeholders})
+        `).all(...ids) as { chunk_id: number; id: number; name: string; description: string }[];
+
+        const propsByChunk = new Map<number, { name: string; value: string }[]>();
+        for (const row of propRows) {
+            if (!propsByChunk.has(row.chunk_id)) propsByChunk.set(row.chunk_id, []);
+            propsByChunk.get(row.chunk_id)!.push({ name: row.name, value: row.value });
+        }
+
+        const conceptsByChunk = new Map<number, { id: number; name: string; description: string }[]>();
+        for (const row of conceptRows) {
+            if (!conceptsByChunk.has(row.chunk_id)) conceptsByChunk.set(row.chunk_id, []);
+            conceptsByChunk.get(row.chunk_id)!.push({
+                id: row.id,
+                name: row.name,
+                description: row.description || ''
+            });
+        }
+
+        return rows.map(r => ({
+            id: r.id,
+            text: r.text,
+            properties: propsByChunk.get(r.id) || [],
+            concepts: conceptsByChunk.get(r.id) || [],
+        }));
     }
 
     // #endregion 'search'
@@ -256,6 +331,14 @@ export default class DB {
         if (ids.length === 0) return [];
         const placeholders = ids.map(() => '?').join(',');
         return this.db.prepare(`SELECT id, name, description FROM concepts WHERE id IN (${placeholders})`).all(...ids) as dbo.Concept[];
+    }
+
+    public findConceptsByNames(names: string[]): { id: number; name: string; description: string }[] {
+        if (names.length === 0) return [];
+        const placeholders = names.map(() => '?').join(',');
+        return this.db.prepare(
+            `SELECT id, name, substr(coalesce(description, ''), 1, 100) as description FROM concepts WHERE name IN (${placeholders})`
+        ).all(...names) as { id: number; name: string; description: string }[];
     }
 
     public async semanticSearch(text: string, limit: number): Promise<SemanticSearchResult[]> {
@@ -461,6 +544,12 @@ export default class DB {
         });
     }
 
+    public removeConceptEdge(chunkId: number, conceptId: number): number {
+        return this.db.prepare(
+            "DELETE FROM edges WHERE chunk_id = ? AND concept_id = ?"
+        ).run(chunkId, conceptId).changes;
+    }
+
     public setChunkProperties(chunkId: number, props: Record<string, string>): void {
         for (const [name, value] of Object.entries(props)) {
             const propertyId = this.#upsertProperty(name);
@@ -498,8 +587,8 @@ export default class DB {
         `).all(propertyName, value) as ChunkResult[];
     }
 
-    public async mergeChunks(sourceIds: number[], targetText: string, targetConcepts?: Concept[]): Promise<{ chunk: ChunkResult; concepts: dbo.Concept[] }> {
-        const result = await this.insertChunk(targetText, targetConcepts || []);
+    public async mergeChunks(sourceIds: number[], targetText: string, targetConcepts?: Concept[], existingConceptIds?: number[]): Promise<{ chunk: ChunkResult; concepts: dbo.Concept[] }> {
+        const result = await this.insertChunk(targetText, targetConcepts || [], existingConceptIds);
         
         if (sourceIds.length > 0) {
             const sourceProps = this.getChunkProperties(sourceIds[0]);
@@ -514,6 +603,71 @@ export default class DB {
             chunk: { id: Number(result.chunk.id), text: result.chunk.text },
             concepts: result.concepts
         };
+    }
+
+    public getRecentChunks(x: number): ShadowChunkResult[] {
+        if (!Number.isInteger(x) || x < 1) {
+            throw new Error('X must be a positive integer');
+        }
+        const rows = this.db.prepare(`
+            SELECT id, substr(text, 1, 200) as text FROM chunks WHERE outdated = 0 ORDER BY created_at DESC LIMIT ?
+        `).all(x) as { id: number; text: string }[];
+        return this.#assembleShadowResults(rows);
+    }
+
+    public getMostAccessedChunks(x: number): ShadowChunkResult[] {
+        if (!Number.isInteger(x) || x < 1) {
+            throw new Error('X must be a positive integer');
+        }
+        const rows = this.db.prepare(`
+            SELECT id, substr(text, 1, 200) as text FROM chunks WHERE outdated = 0 ORDER BY access_count DESC LIMIT ?
+        `).all(x) as { id: number; text: string }[];
+        return this.#assembleShadowResults(rows);
+    }
+
+    public getImportantChunks(x: number): ShadowChunkResult[] {
+        if (!Number.isInteger(x) || x < 1) {
+            throw new Error('X must be a positive integer');
+        }
+        const step1Limit = Math.ceil(x / 2);
+        const step2Limit = x - step1Limit;
+
+        const ids = this.db.prepare(`
+            WITH recent AS (
+                SELECT id, access_count, created_at
+                FROM chunks
+                WHERE outdated = 0
+                ORDER BY created_at DESC
+                LIMIT ?
+            ),
+            step1 AS (
+                SELECT id FROM recent
+                ORDER BY access_count DESC
+                LIMIT ?
+            ),
+            step2 AS (
+                SELECT id FROM chunks
+                WHERE outdated = 0
+                    AND id NOT IN (SELECT id FROM step1)
+                ORDER BY access_count DESC
+                LIMIT ?
+            )
+            SELECT id FROM step1
+            UNION ALL
+            SELECT id FROM step2
+        `).all(x, step1Limit, step2Limit) as { id: number }[];
+
+        const chunkIds = ids.map(r => r.id);
+        if (chunkIds.length === 0) return [];
+        const placeholders = chunkIds.map(() => '?').join(',');
+        const rows = this.db.prepare(`
+            SELECT id, substr(text, 1, 200) as text FROM chunks WHERE id IN (${placeholders})
+        `).all(...chunkIds) as { id: number; text: string }[];
+
+        const idOrder = new Map(chunkIds.map((id, i) => [id, i]));
+        rows.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+        return this.#assembleShadowResults(rows);
     }
 
 }

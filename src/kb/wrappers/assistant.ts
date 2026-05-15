@@ -9,15 +9,12 @@ export default class AssistantWrapper extends BaseWrapper {
     existingConceptIds?: number[],
     sources?: string[],
     memoryType?: string
-  ): Promise<{ chunk: dbo.Chunk; concepts: dbo.Concept[] }> {
-    const props: Record<string, string> = {};
-    if (sources && sources.length > 0) {
-      props.sources = JSON.stringify(sources);
-    }
+  ): Promise<{ chunk: dbo.Chunk; concepts: dbo.Concept[]; notes?: { type: "concept_exists"; name: string; id: number; description: string }[] }> {
+    const result = await super.store(text, concepts, existingConceptIds, sources, undefined);
     if (memoryType) {
-      props.memory_type = memoryType;
+      await this.setProps(Number(result.chunk.id), { memory_type: memoryType });
     }
-    return this.insertChunk(text, concepts || [], existingConceptIds, Object.keys(props).length > 0 ? props : undefined);
+    return result as any;
   }
 
   async promoteToWorking(id: number): Promise<void> {

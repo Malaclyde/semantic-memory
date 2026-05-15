@@ -46,7 +46,11 @@ export default class BaseWrapper extends DB {
     existingConceptIds?: number[],
     sources?: string[],
     scope?: string,
-  ): Promise<{ chunk: dbo.Chunk; concepts: dbo.Concept[] }> {
+  ): Promise<{
+    chunk: dbo.Chunk;
+    concepts: dbo.Concept[];
+    notes?: { type: "concept_exists"; name: string; id: number; description: string }[];
+  }> {
     const props: Record<string, string> = {};
     if (sources && sources.length > 0) {
       props.sources = JSON.stringify(sources);
@@ -54,12 +58,35 @@ export default class BaseWrapper extends DB {
     if (scope) {
       props.scope = scope;
     }
-    return this.insertChunk(
+
+    const existingIds = [...(existingConceptIds || [])];
+    const trulyNew: Concept[] = [];
+    const notes: { type: "concept_exists"; name: string; id: number; description: string }[] = [];
+
+    if (concepts && concepts.length > 0) {
+      const names = concepts.map(c => c.name);
+      const found = this.findConceptsByNames(names);
+      const foundNames = new Set(found.map(f => f.name));
+
+      for (const c of concepts) {
+        if (foundNames.has(c.name)) {
+          const f = found.find(x => x.name === c.name)!;
+          existingIds.push(f.id);
+          notes.push({ type: "concept_exists", name: f.name, id: f.id, description: f.description });
+        } else {
+          trulyNew.push(c);
+        }
+      }
+    }
+
+    const result = await this.insertChunk(
       text,
-      concepts || [],
-      existingConceptIds,
+      trulyNew,
+      existingIds,
       Object.keys(props).length > 0 ? props : undefined
     );
+
+    return { ...result, notes: notes.length > 0 ? notes : undefined };
   }
 
   async getChunks(ids: number[]): Promise<ChunkResult[]> {
@@ -105,6 +132,10 @@ export default class BaseWrapper extends DB {
     return this.setChunkOutdated(id);
   }
 
+  async unlinkConcept(chunkId: number, conceptId: number): Promise<number> {
+    return this.removeConceptEdge(chunkId, conceptId);
+  }
+
   async editConcept(id: number, name: string, description: string): Promise<void> {
     return super.editConcept(id, name, description);
   }
@@ -124,8 +155,38 @@ export default class BaseWrapper extends DB {
   async merge(
     sourceIds: number[],
     targetText: string,
-    targetConcepts?: Concept[]
-  ): Promise<{ chunk: ChunkResult; concepts: dbo.Concept[] }> {
-    return this.mergeChunks(sourceIds, targetText, targetConcepts || []);
+    targetConcepts?: Concept[],
+    existingConceptIds?: number[],
+  ): Promise<{
+    chunk: ChunkResult;
+    concepts: dbo.Concept[];
+    notes?: { type: "concept_exists"; name: string; id: number; description: string }[];
+  }> {
+    const existingIds = [...(existingConceptIds || [])];
+    const trulyNew: Concept[] = [];
+    const notes: { type: "concept_exists"; name: string; id: number; description: string }[] = [];
+
+    if (targetConcepts && targetConcepts.length > 0) {
+      const names = targetConcepts.map(c => c.name);
+      const found = this.findConceptsByNames(names);
+      const foundNames = new Set(found.map(f => f.name));
+
+      for (const c of targetConcepts) {
+        if (foundNames.has(c.name)) {
+          const f = found.find(x => x.name === c.name)!;
+          existingIds.push(f.id);
+          notes.push({ type: "concept_exists", name: f.name, id: f.id, description: f.description });
+        } else {
+          trulyNew.push(c);
+        }
+      }
+    }
+
+    const result = await this.mergeChunks(sourceIds, targetText, trulyNew, existingIds);
+
+    return {
+      ...result,
+      notes: notes.length > 0 ? notes : undefined,
+    };
   }
 }

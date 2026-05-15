@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS chunks (
 -- concepts table
 CREATE TABLE IF NOT EXISTS concepts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     description TEXT,
     embedding BLOB
 );

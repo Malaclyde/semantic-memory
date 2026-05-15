@@ -4,6 +4,10 @@
 - [x] `npm publish` of the whole project
 - [x] `npm publish` of the opencode plugins
 - [x] github workflows
+- [x] [phase-2](.planning/0.1.0/phase-2.md) — shadow retrieval operations
+- [x] [phase-3](.planning/0.1.0/phase-3.md) — chunk text clipping + system prompt injection + tool description overhaul
+- [x] [phase-4](.planning/0.1.0/phase-4.md) — concept dedup + unlink tool + schema constraint
+- [ ] [phase-5](.planning/0.1.0/phase-5.md)
 - [ ] CONTRIBUTING.md
 - [ ] db connection string to a real database
 - [ ] graph viewer to launch automatically from opencode / harness

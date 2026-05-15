@@ -356,3 +356,114 @@ describe('DB: access_count auto-increment', () => {
     expect(after).toBe(before + 1);
   });
 });
+
+// ── Shadow Operations ──────────────────────────────────────────
+
+describe('DB: Shadow Operations', () => {
+  it('getRecentChunks returns X most recent, newest first', () => {
+    const results = db.getRecentChunks(3);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(3);
+    for (let i = 1; i < results.length; i++) {
+      const prev = (db.db.prepare('SELECT created_at FROM chunks WHERE id = ?').get(results[i - 1].id) as any).created_at;
+      const curr = (db.db.prepare('SELECT created_at FROM chunks WHERE id = ?').get(results[i].id) as any).created_at;
+      expect(new Date(prev).getTime()).toBeGreaterThanOrEqual(new Date(curr).getTime());
+    }
+  });
+
+  it('getRecentChunks returns all chunks when fewer than X', () => {
+    const total = (db.db.prepare('SELECT COUNT(*) as count FROM chunks WHERE outdated = 0').get() as any).count;
+    const results = db.getRecentChunks(total + 100);
+    expect(results.length).toBe(total);
+  });
+
+  it('getRecentChunks throws on invalid X', () => {
+    expect(() => db.getRecentChunks(0)).toThrow();
+    expect(() => db.getRecentChunks(-1)).toThrow();
+    expect(() => db.getRecentChunks(1.5)).toThrow();
+  });
+
+  it('getMostAccessedChunks returns X most accessed', () => {
+    const results = db.getMostAccessedChunks(3);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(3);
+    for (let i = 1; i < results.length; i++) {
+      const prev = (db.db.prepare('SELECT access_count FROM chunks WHERE id = ?').get(results[i - 1].id) as any).access_count;
+      const curr = (db.db.prepare('SELECT access_count FROM chunks WHERE id = ?').get(results[i].id) as any).access_count;
+      expect(prev).toBeGreaterThanOrEqual(curr);
+    }
+  });
+
+  it('getMostAccessedChunks returns all when fewer than X', () => {
+    const total = (db.db.prepare('SELECT COUNT(*) as count FROM chunks WHERE outdated = 0').get() as any).count;
+    const results = db.getMostAccessedChunks(total + 100);
+    expect(results.length).toBe(total);
+  });
+
+  it('getMostAccessedChunks throws on invalid X', () => {
+    expect(() => db.getMostAccessedChunks(0)).toThrow();
+    expect(() => db.getMostAccessedChunks(-5)).toThrow();
+  });
+
+  it('getImportantChunks combines recent + accessed', () => {
+    const results = db.getImportantChunks(4);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(4);
+    for (const r of results) {
+      expect(r).toHaveProperty('id');
+      expect(r).toHaveProperty('text');
+      expect(Array.isArray(r.properties)).toBe(true);
+      expect(Array.isArray(r.concepts)).toBe(true);
+    }
+  });
+
+  it('getImportantChunks ensures at least ceil(X/2) recent', () => {
+    const results = db.getImportantChunks(5);
+    if (results.length >= 3) {
+      const recentIds = db.getRecentChunks(5).map(r => r.id);
+      const overlap = results.filter(r => recentIds.includes(r.id));
+      expect(overlap.length).toBeGreaterThanOrEqual(Math.min(3, results.length));
+    }
+  });
+
+  it('getImportantChunks does NOT increment access_count', () => {
+    const chunkId = 1;
+    const before = (db.db.prepare('SELECT access_count FROM chunks WHERE id = ?').get(chunkId) as any).access_count;
+
+    db.getRecentChunks(5);
+    db.getMostAccessedChunks(5);
+    db.getImportantChunks(5);
+
+    const after = (db.db.prepare('SELECT access_count FROM chunks WHERE id = ?').get(chunkId) as any).access_count;
+    expect(after).toBe(before);
+  });
+
+  it('getImportantChunks returns all chunks when fewer than X', () => {
+    const total = (db.db.prepare('SELECT COUNT(*) as count FROM chunks WHERE outdated = 0').get() as any).count;
+    const results = db.getImportantChunks(total + 100);
+    expect(results.length).toBe(total);
+  });
+
+  it('getImportantChunks throws on invalid X', () => {
+    expect(() => db.getImportantChunks(0)).toThrow();
+    expect(() => db.getImportantChunks(-1)).toThrow();
+    expect(() => db.getImportantChunks(2.7)).toThrow();
+  });
+
+  it('shadow methods return properties and concepts', async () => {
+    const stored = await db.insertChunk('Shadow test with metadata', [
+      { name: 'shadow-concept', description: 'A'.repeat(200) }
+    ], undefined, { scope: 'test', color: 'blue' });
+    const id = Number(stored.chunk.id);
+
+    const results = db.getRecentChunks(100);
+    const match = results.find(r => r.id === id);
+    expect(match).toBeDefined();
+    expect(match!.properties.length).toBeGreaterThanOrEqual(2);
+    expect(match!.properties.some(p => p.name === 'scope' && p.value === 'test')).toBe(true);
+    expect(match!.properties.some(p => p.name === 'color' && p.value === 'blue')).toBe(true);
+    expect(match!.concepts.length).toBe(1);
+    expect(match!.concepts[0].name).toBe('shadow-concept');
+    expect(match!.concepts[0].description.length).toBeLessThanOrEqual(100);
+  });
+});
