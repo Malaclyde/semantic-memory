@@ -429,8 +429,8 @@ export default class DB {
         if (olderThan || youngerThan) {
             let dateSql = 'SELECT id FROM chunks WHERE 1=1';
             const dateParams: any[] = [];
-            if (olderThan) { dateSql += ' AND created_at < ?'; dateParams.push(olderThan); }
-            if (youngerThan) { dateSql += ' AND created_at > ?'; dateParams.push(youngerThan); }
+            if (olderThan) { dateSql += ' AND created_at < ?'; dateParams.push(olderThan.replace('T', ' ')); }
+            if (youngerThan) { dateSql += ' AND created_at > ?'; dateParams.push(youngerThan.replace('T', ' ')); }
             const validIds = (this.db.prepare(dateSql).all(...dateParams) as { id: number }[])
                 .map(r => r.id);
             candidates = candidates.filter(id => validIds.includes(id));

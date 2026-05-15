@@ -33,6 +33,7 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
       younger_than: tool.schema.string().optional().describe("ISO 8601 date string. Only return chunks created after this date."),
     },
     async execute(args) {
+      const effectiveLimit = args.limit ?? 5;
       const filters: { propertyName: string; value: string; required: boolean }[] = [];
 
       if (args.scope) {
@@ -40,7 +41,7 @@ export default async function CodingMemoryPlugin(input: PluginInput, options?: P
         filters.push({ propertyName: 'scope', value: args.scope, required });
       }
 
-      const results = await memory.search(args.query, args.limit, {
+      const results = await memory.search(args.query, effectiveLimit, {
         filters: filters.length > 0 ? filters : undefined,
         olderThan: args.older_than,
         youngerThan: args.younger_than,
